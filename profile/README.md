@@ -15,14 +15,14 @@
 *“In Tenebris Venamur — In the darkness, we hunt.”*
 
 [What is Hecate?](#-what-is-hecate) •
-[Terminal Dashboard](#-live-terminal-operations-dashboard) •
-[Real Attack Example](#-real-world-example-from-cve-poc-to-6x-siemedr-in-60s) •
-[Supported CTI Feeds](#-20-supported-intelligence--threat-streams) •
+[1. Terminal Dashboard](#1-live-terminal-operations-dashboard) •
+[2. Real Attack Walkthrough](#2-real-world-attack-walkthrough-from-cve-poc-to-6x-siemedr-in-60s) •
+[3. 20+ CTI Streams](#3-20-supported-intelligence--threat-streams) •
+[4. ATT&CK Navigator](#4-mitre-attck-navigator-layer-export) •
 [Why Defenders Choose Hecate](#-why-defenders-choose-hecate) •
 [How It Works](#-how-it-works) •
-[Employment Scenarios](#-how-it-can-be-employed) •
 [Quick Start](#-quick-start) •
-[Architecture](#-the-hecate-ecosystem)
+[Ecosystem](#-the-hecate-ecosystem)
 
 </div>
 
@@ -48,9 +48,9 @@ CTI Ingestion (20+ Feeds) ──▶ Grounded Research (R-ID) ──▶ Sigma & N
 
 ---
 
-## 🖥️ Live Terminal Operations Dashboard
+## 1. Live Terminal Operations Dashboard
 
-Hecate ships with a live, real-time `htop`-style console monitor (`hecate-agent monitor`) designed for SOC mission rooms and detection engineers:
+Hecate ships with a zero-dependency, real-time `htop`-style console monitor (`hecate-agent monitor`) designed for SOC video walls, mission rooms, and detection engineers. It updates at 1 Hz with zero CPU churn and strict filesystem caching:
 
 ```text
 CPU 21% [██░░░░░░  21.0%] host     RAM 19% [█░░░░░░░  18.7%] 11.3 GiB/60.5 GiB     GPU 0% [░░░░░░░░   0.0%] GTX 1080 (0% · 283MiB/8.0GiB)     DRIVES 80% [██████░░  80.5%] / 187.2 GiB/232.6 GiB
@@ -73,17 +73,49 @@ CPU 21% [██░░░░░░  21.0%] host     RAM 19% [█░░░░░�
 ╰──────────────────────────────────────────────────╯
 ```
 
+### Dashboard Capabilities
+- **Telemetry Ribbon:** Live GPU VRAM, Host CPU, Memory, and Storage gauges with dynamic terminal width flexing.
+- **Sequence Tracker:** Real-time progress bar showing time elapsed on the active pipeline stage.
+- **Action Stream:** Chronological event trail detailing CTI intake, observable enrichment, LLM synthesis, and sandbox detonation.
+- **MITRE ATT&CK Matrix Ribbon:** Live tactical coverage counts for both **Enterprise** (15 tactics) and **Cloud** (5 tactics) matrices.
+- **Feed Health Indicators:** Instant visual health check for all active CTI connectors (green/amber/red).
+
+To launch in your terminal or tmux pane:
+```bash
+hecate-agent monitor
+```
+
 ---
 
-## 🎯 Real-World Example: From CVE PoC to 6x SIEM/EDR in 60s
+## 2. Real-World Attack Walkthrough: From CVE PoC to 6x SIEM/EDR in 60s
 
 Watch how Hecate takes an uncurated GitHub PoC repo ([`CVE-2026-43499`](https://github.com/Hecate-Org/Hecate-Public/pull/19) *GhostLock* LPE) and generates a verified hunt package with multi-platform detection queries:
 
-### 1. Generated Sigma Detection Rule (Vendor-Neutral)
+### Step 1: Raw CTI Input (Uncurated PoC Repository)
+```markdown
+# Motorola Moto G Stylus 5G (2023) Root Exploit - GhostLock (CVE-2026-43499)
+Exploit binary: ghostlock_static (runs on phone via adb shell)
+Usage:
+  adb push ghostlock_static /data/local/tmp/
+  adb shell chmod 755 /data/local/tmp/ghostlock_static
+  python3 exploit.py -t http://<device>:8080 --cve CVE-2026-43499
+```
+
+### Step 2: Generated Vendor-Neutral Sigma Detection Rule
+Hecate identifies the staging commands, extracts the exact executable invocation pattern, and writes a normalized Sigma rule:
+
 ```yaml
 title: 'Command the source shows being run: python3 exploit.py'
 id: 88029454-44f3-4f78-a09b-4c1d9cef1f72
 status: experimental
+description: Detects execution of python3 exploit scripts targeting CVE-2026-43499.
+references:
+  - https://github.com/RetributionByRevenue/motogstylus2023-root
+author: hecate (auto-generated draft - requires analyst review)
+date: '2026-11-01'
+tags:
+  - attack.execution
+  - attack.t1059.006
 logsource:
   category: process_creation
   product: linux
@@ -95,15 +127,15 @@ detection:
       - CVE-2026-43499
   condition: selection
 falsepositives:
-  - Authorized security tooling and penetration testing scripts
+  - Authorized vulnerability research and penetration testing
 level: high
 ```
 
-### 2. Auto-Transpiled Native SIEM & EDR Queries
-Hecate compiles Sigma directly into your estate's native query dialect with zero manual translation:
+### Step 3: Auto-Transpiled Native SIEM & EDR Queries
+No manual query translation. Hecate compiles Sigma rules directly into your production security stack:
 
 <details>
-<summary><b>Microsoft Defender & Sentinel (KQL)</b></summary>
+<summary><b>Microsoft Sentinel & Defender for Endpoint (KQL)</b></summary>
 
 ```kql
 DeviceProcessEvents
@@ -155,38 +187,83 @@ where(process.exe_path=/^.*\/python3$/i AND process.cmd_line=/^.*exploit\.py.*$/
 ```
 </details>
 
-### 3. Automated Atomic Red Team Test
+### Step 4: Closed-Loop Adversary Emulation & Verification
+Hecate pairs every hunt with dynamic adversary emulation to test sensor capture:
 ```bash
-# Automatically generated procedural emulation test to verify sensor telemetry
+# Automated procedural emulation test:
 python3 exploit.py -t http://127.0.0.1:8080 --cve CVE-2026-43499
 ```
+*Expected Telemetry:* Verified against Linux `auditd` (`execve` syscall) and eBPF socket tracing before the rule is approved for deployment.
+
+### Step 5: SOC Responder Triage Playbook (ADS-Lite)
+Included automatically in every hunt package:
+1. **Lineage Verification:** Inspect parent shell PID, executable inode, and user namespace.
+2. **Containment Threshold:** Isolate host if `/data/local/tmp/ghostlock_static` executes or `UID 0` escalation is observed.
+3. **Investigative Pivot:** Query all network connections on port `8080` within ±15 minutes of execution.
 
 ---
 
-## 📡 20+ Supported Intelligence & Threat Streams
+## 3. 20+ Supported Intelligence & Threat Streams
 
-Hecate ingests, correlates, and de-duplicates telemetry across the open and closed threat landscape:
+Hecate's ingestion engine connects directly to the threat landscape with inter-process queue locking, rate limiting, and automated de-duplication:
 
-| Category | Supported Feed Sources |
-| :--- | :--- |
-| **Exploits & PoCs** | GitHub PoC Monitor, CISA Known Exploited Vulnerabilities (KEV), VulnCheck, First.org EPSS, Microsoft MSRC CVRF |
-| **Adversary & Malware Feeds** | AlienVault OTX, MISP Communities, MalwareBazaar, vx-underground, Abuse.ch (ThreatFox, SSLBL, URLhaus) |
-| **Living off the Land (LotL)** | **LOLBAS** (Windows Binaries), **GTFOBins** (Linux Binaries), **LOLDrivers** (Vulnerable Driver Catalog) |
-| **Infrastructure & C2 Recon** | **Censys C2** (Cobalt Strike, Sliver, Mythic, Havoc), **Certstream** (Phishing / TLS Transparency), Shadowserver |
-| **Cloud & Identity Threat Intel** | Permiso pCloud, Wiz Threat Research, AWS Security Bulletins |
-| **Tier-1 Vendor Research** | The DFIR Report, Cisco Talos, Unit 42, Mandiant, Microsoft Security, Red Canary, SentinelOne Labs |
-
----
-
-## 🗺️ MITRE ATT&CK® Navigator Layer Export
-
-Visualize your hunting and detection coverage instantly. Hecate exports interactive MITRE ATT&CK Navigator JSON layers mapping Enterprise and Cloud techniques directly from active hunts:
-
-```bash
-hecate-runner export-layer --output att&ck_coverage.json
+```
+┌────────────────────────────────────────────────────────────────────────────────────────┐
+│                                HECATE CTI INGESTION                                    │
+├──────────────────────┬──────────────────────┬──────────────────┬───────────────────────┤
+│   Exploits & PoCs    │   Malware & Threat   │  LotL & Drivers  │   C2 & Infrastructure │
+├──────────────────────┼──────────────────────┼──────────────────┼───────────────────────┤
+│ • GitHub PoC Monitor │ • AlienVault OTX     │ • LOLBAS         │ • Censys C2 (Active)  │
+│ • CISA KEV           │ • MISP Communities   │   (Windows)      │ • Certstream          │
+│ • VulnCheck KEV      │ • MalwareBazaar      │ • GTFOBins       │   (Real-time TLS)     │
+│ • First.org EPSS     │ • vx-underground     │   (Linux)        │ • Shadowserver API    │
+│ • Microsoft MSRC     │ • Abuse.ch           │ • LOLDrivers     │ • CISA Advisories     │
+│   (CVRF/API)         │   (ThreatFox/SSLBL)  │   (Kernel Drivers│ • Cloud Threat        │
+│                      │ • The DFIR Report    │   Catalog)       │   (Permiso/Wiz/AWS)   │
+└──────────────────────┴──────────────────────┴──────────────────┴───────────────────────┘
 ```
 
-Import `att&ck_coverage.json` directly into [mitre-attack.github.io/attack-navigator](https://mitre-attack.github.io/attack-navigator/) to view heatmaps of covered techniques, detection rules, and tested adversary procedures.
+### Feed Ingestion Features
+- **Real-Time Streaming:** Live WebSocket feed processing via Certstream for brand impersonation and phishing infrastructure.
+- **Anti-Noise Heuristics:** Automatically triages marketing/opinion blogs and non-exploitable commentary into the parked store, refunding draft budgets.
+- **Safe Cursor Persistence:** High-watermark cursors and spool directories prevent pulse loss during concurrent execution.
+
+---
+
+## 4. MITRE ATT&CK® Navigator Layer Export
+
+Never guess your organization's detection gaps. Hecate continuously compiles your hunt catalog into interactive **MITRE ATT&CK Navigator** visual layers:
+
+```bash
+# Export the active coverage layer directly from your workspace
+hecate-runner export-layer --output coverage.json
+```
+
+```json
+{
+  "name": "Hecate Threat Hunting & Detection Coverage",
+  "version": "4.5",
+  "domain": "enterprise-attack",
+  "techniques": [
+    {
+      "techniqueID": "T1190",
+      "tactic": "initial-access",
+      "score": 3,
+      "color": "#e63946",
+      "comment": "Validated via dynamic adversary emulation; 4 active Sigma rules"
+    },
+    {
+      "techniqueID": "T1059.006",
+      "tactic": "execution",
+      "score": 2,
+      "color": "#f4a261",
+      "comment": "Grounded from primary CTI; Python process creation rule staged"
+    }
+  ]
+}
+```
+
+Upload `coverage.json` to [mitre-attack.github.io/attack-navigator](https://mitre-attack.github.io/attack-navigator/) to view a live, color-coded heatmap across all 15 Enterprise tactics and 5 Cloud tactics.
 
 ---
 
