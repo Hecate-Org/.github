@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦉 H E C A T E
+# H E C A T E  H U N T
 
 ### Autonomous Threat Hunting & Detection Engineering Engine
 *Turn raw adversary intelligence into validated, multi-platform detection rules in minutes.*
@@ -12,7 +12,7 @@
 [![Purple Team](https://img.shields.io/badge/Validation-Atomic_Red_Team_%26_CALDERA-purple.svg)](https://github.com/redcanaryco/atomic-red-team)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Hecate-Org/Hecate-Public/pulls)
 
-*“In Tenebris Venamur — In the darkness, we hunt.”*
+*“In Triviis Venamur — At the crossroads, we hunt.”*
 
 [What is Hecate?](#-what-is-hecate) •
 [1. Terminal Dashboard](#1-live-terminal-operations-dashboard) •
@@ -53,7 +53,7 @@ CTI Ingestion (20+ Feeds) ──▶ Grounded Research (R-ID) ──▶ Sigma & N
 Hecate ships with a zero-dependency, real-time `htop`-style console monitor (`hecate-agent monitor`) designed for SOC video walls, mission rooms, and detection engineers. It updates at 1 Hz with zero CPU churn and strict filesystem caching:
 
 <div align="center">
-  <img src="assets/dashboard.png" alt="Hecate Live Terminal Operations Dashboard" width="100%">
+  <img width="100%" alt="image" src="https://github.com/user-attachments/assets/956d3819-e1e1-4a78-bc4b-c893b07177b6" />
   <p><i>Real-time terminal dashboard (<code>hecate-agent monitor</code>) displaying live telemetry, pipeline stages, CTI ingestion events, and MITRE ATT&CK tactical coverage.</i></p>
 </div>
 
