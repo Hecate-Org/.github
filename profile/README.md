@@ -1,6 +1,6 @@
 <div align="center">
 
-# H E C A T E    H U N T
+# H E C A T E 
 
 ### Autonomous Threat Hunting & Detection Engineering Engine
 *Turn raw adversary intelligence into validated, multi-platform detection rules in minutes.*
@@ -377,6 +377,3 @@ The Hecate platform is divided into specialized, decoupled components spanning o
 
 ---
 
-<div align="center">
-  <sub>Maintained with vigilance by the <b>Hecate Organization</b>. Distributed under the Apache 2.0 License.</sub>
-</div>
