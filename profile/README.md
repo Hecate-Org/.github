@@ -1,6 +1,6 @@
 <div align="center">
 
-# H E C A T E  H U N T
+# H E C A T E    H U N T
 
 ### Autonomous Threat Hunting & Detection Engineering Engine
 *Turn raw adversary intelligence into validated, multi-platform detection rules in minutes.*
