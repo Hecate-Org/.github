@@ -52,10 +52,7 @@ CTI Ingestion (20+ Feeds) ──▶ Grounded Research (R-ID) ──▶ Sigma & N
 
 Hecate ships with a zero-dependency, real-time `htop`-style console monitor (`hecate-agent monitor`) designed for SOC video walls, mission rooms, and detection engineers. It updates at 1 Hz with zero CPU churn and strict filesystem caching:
 
-<div align="center">
-  <img src="assets/dashboard.png" alt="Hecate Live Terminal Operations Dashboard" width="100%">
-  <p><i>Real-time terminal dashboard (<code>hecate-agent monitor</code>) displaying live telemetry, pipeline stages, CTI ingestion events, and MITRE ATT&CK tactical coverage.</i></p>
-</div>
+
 
 ### Dashboard Capabilities
 - **Telemetry Ribbon:** Live GPU VRAM, Host CPU, Memory, and Storage gauges with dynamic terminal width flexing.
