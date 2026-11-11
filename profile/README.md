@@ -3,34 +3,112 @@
 Agentic threat hunting and detection engineering: run existing hunts against your
 telemetry, or turn threat intelligence into proposed hunt and detection content.
 
-Hecate combines a Python reasoning engine, an execution runner, and a versioned
-content workspace. Models propose hypotheses and findings; query guardrails,
-evidence checks and analyst review govern their use. Generated rules and converted
-queries need local validation before they become production detections.
+Hecate pairs a Python reasoning engine with an autonomous execution coordinator and
+a versioned content workspace. Models propose hypotheses and findings; query guardrails,
+evidence checks, and human analyst review govern their execution.
 
-[Architecture](#architecture-and-workspace-model) ·
-[Get started](#start-in-a-new-directory) ·
-[Run existing hunts](#run-existing-hunts-without-generating-new-content) ·
-[Generate content](#generate-new-hunt-content) ·
-[Services](#optional-long-running-processes) ·
-[Troubleshooting](#first-run-troubleshooting)
+[⚡ 5-Minute Quickstart](#-5-minute-developer-quickstart) ·
+[Developer Cheat Sheet](#-developer-cheat-sheet) ·
+[Architecture & Workspace Model](#️-architecture-and-workspace-model) ·
+[Choose Your Path](#-choose-your-path) ·
+[Services & Daemons](#️-optional-services--daemons) ·
+[Troubleshooting](#-first-run-troubleshooting--diagnostics)
 
-## Choose your starting point
+---
 
-| Goal | Components | What you provide |
+## ⚡ 5-Minute Developer Quickstart
+
+Get Hecate up and running locally in under five minutes. **Zero API keys, model subscriptions, or live SIEM credentials are required to start.**
+
+### 1. One-Line Setup
+
+Run the following in your terminal (Linux/macOS Bash or Windows WSL with Python 3.11+ and [uv](https://docs.astral.sh/uv/)):
+
+```bash
+# 1. Create a workspace directory and clone the repositories
+mkdir hecate-dev && cd hecate-dev
+git clone https://github.com/Hecate-Org/Hecate-Core.git
+git clone https://github.com/Hecate-Org/Hecate-Runner.git
+git clone https://github.com/Hecate-Org/Hecate-Public.git
+
+# 2. Set up a shared virtual environment and install both packages in editable mode
+uv venv .venv
+source .venv/bin/activate
+uv pip install -e './Hecate-Core[all,dev]' -e './Hecate-Runner[dev]'
+
+# 3. Create an environment helper script for easy terminal reuse
+cat << 'EOF' > env.sh
+source .venv/bin/activate
+export HECATE_WORKSPACE="$(pwd)/Hecate-Public"
+export HECATE_BIN="$(pwd)/.venv/bin/hecate-agent"
+EOF
+source env.sh
+cd Hecate-Public
+
+# 4. Verify your installation by running the offline fixture demo!
+hecate-runner demo
+hecate-agent hunt list
+```
+
+> [!TIP]
+> **What just happened?** The `demo` command created an ephemeral fixture workspace and ran an end-to-end generation cycle using mock telemetry and mock LLM providers. `hunt list` reads the catalog of open hunts from `Hecate-Public`.
+
+Whenever you open a new shell, simply run:
+```bash
+cd /path/to/hecate-dev && source env.sh && cd Hecate-Public
+```
+
+---
+
+## 📋 Developer Cheat Sheet
+
+Here are the most common commands you will use daily:
+
+| Workflow | Command | What it does |
 |---|---|---|
-| Browse the hunt catalog | Public; Core for CLI navigation | No model or SIEM credentials |
-| Try the fixture demo | Core + Runner | No model or SIEM credentials |
-| Run agentic hunts from existing H files | Core + Runner + your workspace | A model, a supported SIEM, verified telemetry mappings and reviewed hunts |
-| Generate hypotheses and detection proposals from CTI | Core + Runner + your workspace | A model and CTI input; Tavily for web-search grounding |
-| Add ChatOps, publishing or emulation | The relevant optional integrations | Their credentials, destinations and authorization |
+| **Health Check** | `hecate-runner doctor` | Verifies Python environment, ATT&CK cache, and configured providers |
+| **Catalog Navigation** | `hecate-agent hunt list` | Lists all hunts (active and planning) in the workspace |
+| **View Hunt Details** | `hecate-agent hunt show H-0033` | Shows hypotheses, detection criteria, and target SIEM queries |
+| **Transpile Sigma Rules** | `hecate-agent sigma convert <rule.yml> -t splunk_spl` | Transpiles a Sigma rule into Splunk, Elastic, Sentinel, etc. |
+| **Stage a Hunt Sweep** | `hecate-runner sweep stage --hunt-id H-0033 --days 1` | Prepares a hunt query to execute against your SIEM |
+| **Inspect Staged Sweeps** | `hecate-runner sweep pending` | Lists queued sweeps awaiting analyst approval |
+| **Approve & Execute Sweep**| `hecate-runner sweep approve <SWEEP-ID>` | Runs the query through count-first safety gates |
+| **Update ATT&CK Matrix**| `hecate-agent attack update` | Refreshes the local MITRE ATT&CK STIX 2.1 SQLite cache |
+| **Live Terminal Monitor**| `hecate-agent monitor` | Opens a real-time TUI dashboard tracking agent operations |
+| **Run All Unit Tests** | `pytest ../Hecate-Core/tests && pytest ../Hecate-Runner/tests` | Runs complete test suites across both repositories |
 
-Running existing hunts does **not** require generating your own H files, polling
-CTI feeds, publishing to GitHub, or running an emulation lab.
+---
 
-## Architecture and workspace model
+## 🏛️ Architecture and Workspace Model
 
 Core is the engine, and Runner is the coordinator. The enterprise-specific component should be a private workspace. Hecate-Public is the shared catalog and starter workspace.
+
+```text
+┌────────────────────────────────────────────────────────────────────────┐
+│                        Developer / Operator CLI                        │
+│          hecate-agent (Core Engine)       hecate-runner (Coordinator)  │
+└───────────────────┬──────────────────────────────────┬─────────────────┘
+                    │                                  │
+                    ▼                                  ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                           Selected Workspace                           │
+│                     (HECATE_WORKSPACE environment)                     │
+│                                                                        │
+│   Shared Content (Hecate-Public or Enterprise Git Repo):               │
+│     ├── hunts/           # Structured Markdown hunt definitions        │
+│     ├── queries/         # Target SIEM queries (Splunk, Elastic, etc.) │
+│     ├── research/        # CTI dossiers and threat tradecraft briefs   │
+│     └── knowledge/       # Hunting methodology & environment profiles  │
+│                                                                        │
+│   Private & Runtime State (Local disk / Secret store / .gitignore):    │
+│     ├── .env             # API keys, SIEM tokens, and execution flags  │
+│     ├── investigations/  # Analyst triage findings & lead evidence     │
+│     ├── logs/            # Audit trails & execution watermarks         │
+│     └── .hecate/         # Local SQLite cache & cursor bookmarks       │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+### Component Breakdown
 
 | Component | What belongs there |
 |---|---|
@@ -40,11 +118,14 @@ Core is the engine, and Runner is the coordinator. The enterprise-specific compo
 | Your private enterprise workspace | Your environment profile, local hunting guidance, configuration, investigations, findings, and runtime results |
 | [.github](https://github.com/Hecate-Org/.github) | Organization profile and documentation; optional to clone and not an application dependency |
 
-### Credentials and configuration
+### Credentials and Configuration
 
-You provide the credentials. Core and Runner consume them. Their `.env.example` files document the settings each feature needs; actual keys should come from an ignored workspace `.env`, service environment, or secret store. You don't need separate copies of the same keys for each code repository.
+You provide the credentials. Core and Runner consume them.
+- Their `.env.example` files document the settings each feature needs.
+- Actual keys should come from an ignored workspace `.env`, service environment, or secret store.
+- You **do not** need separate copies of the same keys for each code repository; both Core and Runner read from the active workspace `.env`.
 
-### Environmental knowledge and operational results
+### Environmental Knowledge and Operational Results
 
 Environmental knowledge comes from the selected workspace:
 
@@ -54,7 +135,7 @@ Environmental knowledge comes from the selected workspace:
 
 Results also belong in that workspace. Hunt documents, research, queries, and investigations are content; logs, evidence, databases, and `.hecate/` hold operational state and execution records. Private findings should remain private even when the original hunt came from Public.
 
-### Workspace layout
+### Workspace Layout
 
 A production or enterprise deployment looks like this:
 
@@ -84,242 +165,145 @@ Public content can seed that private workspace; the applications don't automatic
 
 **Core contains the readers; the selected workspace supplies the content.** For local developer exploration or evaluating starter hunts, your checkout can use `Hecate-Public` as its initial workspace (where `HECATE_WORKSPACE` points to `Hecate-Public`), supplying the starter credentials file, knowledge, and default output locations. For enterprise adoption, those deployment-specific responsibilities, private telemetry profiles, and hunt findings should move into a private workspace.
 
-## Start in a new directory
+---
 
-Prerequisites: Git, Python 3.11 or newer, and [uv](https://docs.astral.sh/uv/).
-The shell examples use Bash/zsh on Linux or macOS; Windows developers can use WSL.
-Installing dependencies needs network access. The fixture demo runs without model
-or SIEM access after installation. System services are optional.
+## 🎯 Choose Your Path
 
-### 1. Clone and install into one environment
+Select the workflow that matches your objective:
 
-Run these commands from the directory where you want the new checkout:
+### Path A: Code Contributor (Hacking on Core or Runner)
 
-```bash
-mkdir hecate-dev
-cd hecate-dev
+If you are developing features, adding Sigma backends, or improving agent reasoning:
 
-git clone https://github.com/Hecate-Org/Hecate-Core.git
-git clone https://github.com/Hecate-Org/Hecate-Runner.git
-git clone https://github.com/Hecate-Org/Hecate-Public.git
+1. Both packages are installed in editable mode (`-e`), meaning changes to Python files take effect immediately.
+2. Run tests anytime from their respective directories:
+   ```bash
+   cd ../Hecate-Core && python -m pytest
+   cd ../Hecate-Runner && python -m pytest
+   ```
+3. Run linting and code formatting checks:
+   ```bash
+   uv run ruff check .
+   ```
 
-uv venv .venv
-source .venv/bin/activate
-uv pip install -e './Hecate-Core[all,dev]' -e './Hecate-Runner[dev]'
+### Path B: Threat Hunter (Running Sweeps Against Your SIEM)
 
-export HECATE_WORKSPACE="$PWD/Hecate-Public"
-export HECATE_BIN="$PWD/.venv/bin/hecate-agent"
-cd Hecate-Public
-```
+If you want to execute existing hunts against your security data:
 
-Install both packages into the **same** environment: Runner imports Core as well
-as invoking its CLI. Installing Core's extras into an unrelated environment leaves
-Runner without those capabilities. The editable installs above use your local Core
-checkout, including its model, research, ATT&CK and Sigma extras.
+1. **Configure your query provider in `.env`**:
+   ```bash
+   cp .env.example .env
+   ```
+   Set `HECATE_RUNNER_QUERY_PROVIDER` to `splunk`, `sentinel`, `elastic`, or `crowdstrike`, and provide the corresponding endpoint and token:
+   ```dotenv
+   HECATE_RUNNER_QUERY_PROVIDER=splunk
+   SPLUNK_HOST=splunk.corp.internal
+   SPLUNK_PORT=8089
+   SPLUNK_TOKEN=your-auth-token
+   ```
+   *(Keep `mock` while practicing without live queries.)*
 
-The `.github` repository is optional. If you also want to edit this organization
-profile, clone it into `hecate-dev/.github`; there is nothing to install from it.
+2. **Review and stage a hunt sweep**:
+   ```bash
+   # Inspect a catalog hunt
+   hecate-agent hunt show H-0033
+   
+   # Mark it active and stage a sweep for the past 24 hours
+   hecate-agent hunt update H-0033 --status active
+   hecate-runner sweep stage --hunt-id H-0033 --days 1
+   ```
 
-### 2. Confirm the CLIs and run the demo
+3. **Approve and execute**:
+   ```bash
+   hecate-runner sweep pending
+   hecate-runner sweep approve <SWEEP-ID>
+   ```
+   > [!NOTE]
+   > Execution uses a safety-first count gate: if the query matches too many records, it pauses for confirmation before returning raw event telemetry.
 
-From `Hecate-Public`, with the shared environment still active:
+4. **Continuous Scheduled Sweeps**:
+   To run active hunts automatically on a schedule:
+   ```bash
+   hecate-runner sweep daemon
+   ```
 
-```bash
-hecate-agent --version
-hecate-runner --help
-hecate-runner demo
-hecate-agent hunt list
-```
+### Path C: Detection Engineer (CTI-to-Hunt Generation)
 
-The demo creates a temporary fixture workspace and exercises the generation flow
-with mock providers. It does not validate a real model, your sensors, or detection
-efficacy. `hunt list` should read the Public catalog selected above.
+If you want Hecate's agents to analyze threat intelligence, formulate hypotheses, and generate Sigma rules:
 
-### 3. Configure the workspace
+1. **Configure your LLM provider in `.env`**:
+   Connect a local Ollama instance (no cost/cloud required):
+   ```dotenv
+   HECATE_LLM_PROVIDER=ollama
+   HECATE_LLM_MODEL=replace-with-your-installed-model-tag
+   HECATE_LLM_BASE_URL=http://localhost:11434
+   ```
+   Or connect an OpenAI / LiteLLM-compatible API:
+   ```dotenv
+   HECATE_LLM_PROVIDER=openai
+   HECATE_LLM_MODEL=replace-with-your-model-id
+   HECATE_LLM_BASE_URL=https://api.openai.com/v1
+   OPENAI_API_KEY=replace-with-your-api-key
+   ```
+2. **Download MITRE ATT&CK reference data**:
+   ```bash
+   hecate-agent attack update
+   ```
+3. **Queue threat intelligence and run a cycle**:
+   ```bash
+   mkdir -p cti_queue
+   echo "Adversaries are abusing CVE-2026-XXXX via powershell download cradles..." > cti_queue/advisory.txt
+   hecate-runner run
+   ```
+   Draft hunts and generated Sigma rules will appear in `hunts/` and `queries/` for analyst review.
+   To run continuous intake, use `hecate-runner daemon`.
 
-```bash
-cp .env.example .env
-```
+---
 
-Edit this workspace's ignored `.env`. Use the provider and credential stubs in
-[Core's example](https://github.com/Hecate-Org/Hecate-Core/blob/main/.env.example)
-and feature settings in
-[Runner's example](https://github.com/Hecate-Org/Hecate-Runner/blob/main/.env.example).
-Copy only the sections for features you intend to use; do not maintain conflicting
-model or SIEM settings in multiple files.
+## ⚙️ Optional Services & Daemons
 
-For an initial offline setup, put these settings in `.env`:
+For automated production deployments, background daemons can be run independently in separate terminals with the same environment active:
 
-```dotenv
-HECATE_RUNNER_QUERY_PROVIDER=mock
-HECATE_AUTO_HUNT_EXECUTION_ENABLED=false
-HECATE_AUTO_HUNT_APPROVAL_REQUIRED=true
-HECATE_RUNNER_SIEM_DEPLOY_ENABLED=false
-HECATE_RUNNER_SIEM_DEPLOY_DRY_RUN=true
-HECATE_RUNNER_SIEM_DRIFT_AUDIT_INTERVAL_SEC=0
-HECATE_RUNNER_GITHUB_PUBLISHING_ENABLED=false
-HECATE_RUNNER_MISP_PUBLISHING_ENABLED=false
-HECATE_BAS_ENABLED=false
-HECATE_BAS_AUTO_EXECUTE_LIVE=false
-```
-
-Existing shell environment variables take precedence over `.env`. Export
-`HECATE_WORKSPACE` and `HECATE_BIN` again in each new terminal, and activate the
-shared `.venv`. A Runner-local `.env` can also override workspace dotenv values.
-
-For agentic features, choose one model configuration. For example, a local Ollama
-server needs your installed model tag and reachable endpoint:
-
-```dotenv
-HECATE_LLM_PROVIDER=ollama
-HECATE_LLM_MODEL=replace-with-your-installed-model-tag
-HECATE_LLM_BASE_URL=http://localhost:11434
-```
-
-Alternatively, use an OpenAI-compatible backend:
-
-```dotenv
-HECATE_LLM_PROVIDER=openai
-HECATE_LLM_MODEL=replace-with-your-model-id
-HECATE_LLM_BASE_URL=https://api.openai.com/v1
-OPENAI_API_KEY=replace-with-your-api-key
-```
-
-These are alternative examples, not working credentials. Anthropic through LiteLLM,
-Bedrock and separate simple/complex model settings are documented in Core's example.
-Add `TAVILY_API_KEY` if you want web-search-backed research. It is not required just
-to execute existing hunt queries.
-
-Fill `knowledge/environment.md` with your verified sources, field mappings, asset
-coverage, retention, ingestion lag and validation evidence. The starter profile is
-unverified. `knowledge/hunting-knowledge.md` supplies tradecraft; agents use compact
-guidance for their current task rather than copying the entire reference.
-
-## Run existing hunts without generating new content
-
-1. Review a catalog hunt and adapt its queries to your actual data and schema.
-2. In `.env`, select `splunk`, `sentinel`, `elastic` or `crowdstrike` for
-   `HECATE_RUNNER_QUERY_PROVIDER`, and supply that backend's endpoint/credentials.
-   Keep `mock` while practicing without live queries.
-3. Validate telemetry availability and the query's expected positive and legitimate
-   negative cases. Review the hunt's scope and status before enabling execution.
-
-After review, replace `H-XXXX` below with the actual hunt ID:
-
-```bash
-hecate-agent hunt update H-XXXX --status active
-hecate-runner sweep list
-hecate-runner sweep stage --hunt-id H-XXXX --days 1
-hecate-runner sweep pending
-```
-
-Staging queues a sweep for review. To execute, use the actual sweep ID printed by
-`sweep pending`:
-
-```bash
-hecate-runner sweep approve SWEEP-REPLACE-WITH-THE-PRINTED-ID
-```
-
-Approval executes against the configured backend through the count-first gate.
-`mock` returns fixture results; choose a live backend only when ready. Scheduled
-sweeps require active hunts with matching native query files. No eligible hunts in
-a planning-only catalog is expected, not an installation failure.
-
-For scheduled existing-hunt execution, set `HECATE_AUTO_HUNT_EXECUTION_ENABLED=true`,
-retain `HECATE_AUTO_HUNT_APPROVAL_REQUIRED=true`, and run:
-
-```bash
-hecate-runner sweep daemon
-```
-
-You do not need the CTI generation daemon for this mode. Slack interaction is
-optional; CLI staging and approval work without it. Follow-on pivots use the
-configured limits and execution policy. Zero matches mean not observed in the
-tested scope, not proof that the estate is clean.
-
-## Generate new hunt content
-
-Generation is a separate workflow. Configure the model, CTI input and research
-settings before starting it. For a first run, use `HECATE_RUNNER_CTI_PROVIDER=file`
-and place source text in `cti_queue/next.txt` inside the workspace. Tavily credentials
-enable the web-search portion of research; source text and research grounding still
-need review.
-
-```bash
-hecate-agent attack update
-hecate-runner doctor
-hecate-runner run
-```
-
-`attack update` downloads ATT&CK data. `doctor` checks capabilities and configuration;
-an incomplete setup can report missing data or credentials. `run` processes a
-generation cycle subject to quotas and spacing; `hecate-runner daemon` schedules
-generation continuously. Drafts enter planning and need review before live use.
-
-See [Runner's operating guide](https://github.com/Hecate-Org/Hecate-Runner/blob/main/docs/HOW_TO.md)
-for feed selection, budgets, research, publishing and maintenance. GitHub App and
-MISP publishing are optional; they are not prerequisites for local hunting.
-
-## Optional long-running processes
-
-Start only the processes needed for your workflow, in separate terminals with the
-same environment and workspace selected:
-
-| Command | Purpose |
+| Daemon Command | Purpose |
 |---|---|
-| `hecate-runner sweep daemon` | Schedule execution of existing active hunts |
-| `hecate-runner daemon` | Poll CTI and generate new planning hunts |
-| `hecate-runner maintenance` | Process publishing queues and configured SIEM drift audits/notifications |
-| `hecate-runner slack-bot` | Slack Socket Mode interaction; requires bot/app tokens and app configuration |
-| `hecate-agent monitor` | Display workspace activity and operational status in the terminal |
+| `hecate-runner sweep daemon` | Continuously evaluates scheduled active hunt sweeps against your SIEM |
+| `hecate-runner daemon` | Autonomous 24/7 CTI polling, research, and planning-hunt generation |
+| `hecate-runner maintenance` | Executes SIEM drift audits, query state sync, and release publishing |
+| `hecate-runner slack-bot` | Interactive Slack Socket Mode bot for staging, approvals, and alert triage |
+| `hecate-agent monitor` | Interactive terminal UI monitoring agent tasks and execution events |
 
 <img width="100%" alt="Hecate terminal monitor showing pipeline progress and an action stream" src="https://github.com/user-attachments/assets/956d3819-e1e1-4a78-bc4b-c893b07177b6" />
 
-For Linux systemd deployment, inspect
-[the service templates](https://github.com/Hecate-Org/Hecate-Runner/tree/main/systemd)
-and configure their user, working directory, environment file and executable paths.
-Service installation is not part of the developer quick start. BAS/CALDERA, detection
-deployment and automatic reconciliation are separate opt-in features.
+For Linux systemd deployment, inspect [the service templates in Hecate-Runner](https://github.com/Hecate-Org/Hecate-Runner/tree/main/systemd).
 
-Sigma conversion supports additional target dialects, including SentinelOne and
-Rapid7. A conversion target is not necessarily a Runner live-query backend, and
-successful conversion is not evidence of sensor coverage or detection efficacy.
+---
 
-## First-run troubleshooting
+## 🩺 First-Run Troubleshooting & Diagnostics
 
-| Symptom | Check |
-|---|---|
-| CLI not found | Activate `hecate-dev/.venv`; confirm both editable installs completed |
-| Imports or optional features missing | Both CLIs must use the shared environment with Core's extras installed |
-| Wrong/empty hunt catalog | Print `HECATE_WORKSPACE`; it should point to your content workspace, not Core |
-| Model settings appear ignored | Check exported shell variables and a Runner-local `.env` for overrides |
-| No active hunts eligible for sweeps | Review hunt status, backend and corresponding native query files |
-| No model can be selected | Supply one supported provider/model setup and its credentials or local server |
-| `doctor` reports missing ATT&CK data | Run `hecate-agent attack update`; downloading dependencies alone does not populate every data cache |
-| Unexpected drift alerts | Check `HECATE_RUNNER_SIEM_DRIFT_AUDIT_INTERVAL_SEC` and the maintenance process; use `0` to opt out of new audits |
+Run `hecate-runner doctor` first to diagnose common configuration issues. If you run into a problem, check this guide:
 
-When reporting a setup problem, include the command, Python version, repository
-commit IDs and error text with secrets and private telemetry removed. A fresh clone
-contains committed remote changes; it will not include another checkout's local edits.
+| Problem | Root Cause | Actionable Fix |
+|---|---|---|
+| `hecate-agent: command not found` | Virtual environment is not activated in the current shell | Run `source env.sh` or `source .venv/bin/activate` |
+| `ModuleNotFoundError` or missing dialects | Packages installed into separate environments or extras missing | Run `uv pip install -e './Hecate-Core[all,dev]' -e './Hecate-Runner[dev]'` |
+| Empty hunt list (`hunt list` returns 0) | `HECATE_WORKSPACE` is unset or pointing to `Hecate-Core` | Run `export HECATE_WORKSPACE="$(pwd)"` from within `Hecate-Public` |
+| `doctor` reports missing ATT&CK data | STIX 2.1 data cache has not been downloaded | Run `hecate-agent attack update` |
+| `No model can be selected` | Missing LLM configuration in `.env` | Ensure `HECATE_LLM_PROVIDER` and corresponding model/keys are set in `.env` |
+| `Sweep staging fails: no active hunts` | Hunt is still in `planning` status | Run `hecate-agent hunt update H-XXXX --status active` |
+| Unexpected drift alerts in maintenance | Automatic drift interval running unexpectedly | Set `HECATE_RUNNER_SIEM_DRIFT_AUDIT_INTERVAL_SEC=0` in `.env` to disable audits |
 
-## Development and further reading
+When reporting a setup problem, include the command, Python version, repository commit IDs, and error text with secrets and private telemetry removed.
 
-The quick start installs development dependencies. With the shared environment
-active, run each repository's tests from its own directory:
+---
 
-```bash
-cd ../Hecate-Core
-python -m pytest
-cd ../Hecate-Runner
-python -m pytest
-```
+## 📚 Further Reading & References
 
-- [Core installation and optional features](https://github.com/Hecate-Org/Hecate-Core/blob/main/docs/INSTALL.md)
-- [Core CLI reference](https://github.com/Hecate-Org/Hecate-Core/blob/main/docs/CLI_REFERENCE.md)
-- [Runner onboarding](https://github.com/Hecate-Org/Hecate-Runner/blob/main/docs/ONBOARDING.md)
-- [Public workspace and content](https://github.com/Hecate-Org/Hecate-Public)
-- [Hunting knowledge](https://github.com/Hecate-Org/Hecate-Public/blob/main/knowledge/hunting-knowledge.md)
-- [Environment template](https://github.com/Hecate-Org/Hecate-Public/blob/main/knowledge/environment.md)
+- [Core Installation Guide](https://github.com/Hecate-Org/Hecate-Core/blob/main/docs/INSTALL.md)
+- [Core CLI Reference](https://github.com/Hecate-Org/Hecate-Core/blob/main/docs/CLI_REFERENCE.md)
+- [Runner Onboarding & Operating Guide](https://github.com/Hecate-Org/Hecate-Runner/blob/main/docs/HOW_TO.md)
+- [Public Workspace & Hunt Catalog](https://github.com/Hecate-Org/Hecate-Public)
+- [Hunting Methodology Knowledge Base](https://github.com/Hecate-Org/Hecate-Public/blob/main/knowledge/hunting-knowledge.md)
+- [Environment Specification Template](https://github.com/Hecate-Org/Hecate-Public/blob/main/knowledge/environment.md)
 
 Original Hecate code and documentation use the MIT license. Imported intelligence,
 quotations and catalog content retain their applicable terms; see each repository's
